@@ -1,19 +1,35 @@
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from oauth2client.service_account import ServiceAccountCredentials 
 from urllib.parse import unquote
 import functools
+import os
+import json
+
 import auth
 
 app = Flask(__name__)
-app.secret_key = 'donz_hockey_secret_key'
+app.secret_key = os.environ.get('APP_SECRET_KEY', 'default_secret_for_local_dev')
 
-SERVICE_ACCOUNT_KEY_PATH = 'credentials.json'
 SPREADSHEET_TITLE = 'Donz Hockey Main'
+GOOGLE_AUTH_VAR_NAME = 'google_auth'
 
 def get_sheet(worksheet_name):
+    
+    service_account_json_string = os.environ.get(GOOGLE_AUTH_VAR_NAME)
+
+    if not service_account_json_string:
+        raise ValueError(f"Environment variable '{GOOGLE_AUTH_VAR_NAME}' is not set.")
+
+    try:
+        credentials_info = json.loads(service_account_json_string)
+    except json.JSONDecodeError:
+        raise ValueError("Failed to parse 'google_auth' JSON string.")
+
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_ACCOUNT_KEY_PATH, scope)
+    
+    creds = ServiceAccountCredentials.from_service_account_info(credentials_info, scope)
+    
     client = gspread.authorize(creds)
     sheet = client.open(SPREADSHEET_TITLE)
     return sheet.worksheet(worksheet_name)
@@ -90,7 +106,9 @@ def get_payment_data():
                 payment_status[month] = is_paid
             players.append({"id": row[0], "name": row[1], "position": row[2] if len(row)>2 else "", "payments": payment_status})
         return jsonify({"months": months, "players": players})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        print(f"Error fetching payment data: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/update', methods=['POST'])
 @login_required
@@ -107,7 +125,9 @@ def update_payment():
         if not cell: return jsonify({"success": False, "message": "ID not found"}), 404
         ws.update_cell(cell.row, col_index, data['status'])
         return jsonify({"success": True})
-    except Exception as e: return jsonify({"success": False, "message": str(e)}), 500
+    except Exception as e: 
+        print(f"Error updating payment: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/attendance-roster', methods=['GET'])
 @login_required
@@ -120,7 +140,9 @@ def get_attendance_roster():
             if name.strip():
                 players.append({"id": name, "name": name})
         return jsonify(players)
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        print(f"Error fetching roster: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get-attendance-for-date', methods=['GET'])
 @login_required
@@ -140,7 +162,9 @@ def get_attendance_for_date():
             if status.upper() == 'P':
                 present_players.append(names_column[i])
         return jsonify(present_players)
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        print(f"Error fetching attendance for date: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/submit-attendance', methods=['POST'])
 @login_required
@@ -178,7 +202,9 @@ def submit_attendance():
         if updates: ws.batch_update(updates)
         return jsonify({"success": True, "message": f"Saved {date_str}"})
 
-    except Exception as e: return jsonify({"success": False, "message": str(e)}), 500
+    except Exception as e: 
+        print(f"Error submitting attendance: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/attendance-history', methods=['GET'])
 @login_required
@@ -199,7 +225,9 @@ def get_attendance_history():
             total_present = row_data.count('P')
             records.append({"name": name, "history": row_data, "total": total_present})
         return jsonify({"dates": dates, "records": records})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        print(f"Error fetching history: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/player-details', methods=['GET'])
 @login_required
@@ -219,7 +247,9 @@ def get_player_details():
             if status.upper() == 'P': attended_dates.append(date)
         attended_dates.sort(reverse=True)
         return jsonify({"name": name, "total": len(attended_dates), "dates": attended_dates})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        print(f"Error fetching player details: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
