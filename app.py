@@ -26,6 +26,7 @@ def get_sheet(worksheet_name):
         raise ValueError("Failed to parse 'google_auth' JSON string.")
 
     try:
+        # This line uses the correct, modern gspread method for service account info
         client = gspread.service_account_info(credentials_info)
     except Exception as e:
         raise RuntimeError(f"gspread authorization failed. Check your JSON format: {e}")
@@ -83,6 +84,54 @@ def records_page():
 def player_profile(name):
     decoded_name = unquote(name)
     return render_template('player.html', player_name=decoded_name)
+
+@app.route('/api/debug_check', methods=['GET'])
+def debug_check():
+    """Endpoint to check environment variables and GSheets connectivity for debugging."""
+    results = {
+        "env_var_check": False,
+        "env_var_present": "No",
+        "env_var_length": 0,
+        "gspread_auth_status": "FAIL",
+        "gspread_auth_message": "Not attempted.",
+        "gspread_read_status": "FAIL",
+        "gspread_read_message": "Not attempted."
+    }
+
+    # 1. Environment Variable Check
+    service_account_json_string = os.environ.get(GOOGLE_AUTH_VAR_NAME)
+    if service_account_json_string:
+        results["env_var_present"] = "Yes (Found)"
+        results["env_var_length"] = len(service_account_json_string)
+        
+        try:
+            json.loads(service_account_json_string)
+            results["env_var_check"] = True
+            results["env_var_message"] = "JSON appears valid."
+        except json.JSONDecodeError as e:
+            results["env_var_message"] = f"JSON DECODE ERROR: {e}"
+            results["env_var_check"] = False
+    else:
+        results["env_var_message"] = f"Environment variable '{GOOGLE_AUTH_VAR_NAME}' is NOT SET."
+    
+    # 2. Gspread Connectivity Check
+    if results["env_var_check"]:
+        try:
+            # Attempt to connect to the sheet and read a value
+            ws = get_sheet('PAYMENTS2026')
+            results["gspread_auth_status"] = "SUCCESS"
+            results["gspread_auth_message"] = "Credentials accepted by gspread."
+            
+            # Attempt to read a cell to confirm access
+            test_read = ws.cell(1, 1).value
+            results["gspread_read_status"] = "SUCCESS"
+            results["gspread_read_message"] = f"Successfully read cell A1: '{test_read}'"
+
+        except Exception as e:
+            results["gspread_auth_message"] = f"GSPREAD/GSHEETS ERROR: {e}"
+            results["gspread_read_message"] = f"Failed to read sheet: {e}"
+
+    return jsonify(results)
 
 @app.route('/api/data', methods=['GET'])
 @login_required
