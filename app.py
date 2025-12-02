@@ -1,6 +1,5 @@
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials 
+import gspread 
 from urllib.parse import unquote
 import functools
 import os
@@ -9,7 +8,7 @@ import json
 import auth
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('APP_SECRET_KEY', 'default_secret_for_local_dev')
+app.secret_key = os.environ.get('APP_SECRET_KEY', 'a_strong_fallback_secret_for_local_dev_only') 
 
 SPREADSHEET_TITLE = 'Donz Hockey Main'
 GOOGLE_AUTH_VAR_NAME = 'google_auth'
@@ -26,11 +25,11 @@ def get_sheet(worksheet_name):
     except json.JSONDecodeError:
         raise ValueError("Failed to parse 'google_auth' JSON string.")
 
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    
-    creds = ServiceAccountCredentials.from_service_account_info(credentials_info, scope)
-    
-    client = gspread.authorize(creds)
+    try:
+        client = gspread.service_account_info(credentials_info)
+    except Exception as e:
+        raise RuntimeError(f"gspread authorization failed. Check your JSON format: {e}")
+
     sheet = client.open(SPREADSHEET_TITLE)
     return sheet.worksheet(worksheet_name)
 
