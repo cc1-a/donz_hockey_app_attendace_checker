@@ -11,22 +11,36 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('APP_SECRET_KEY', 'a_strong_fallback_secret_for_local_dev_only') 
 
 SPREADSHEET_TITLE = 'Donz Hockey Main'
-GOOGLE_AUTH_VAR_NAME = 'google_auth'
+
+HARDCODED_SERVICE_ACCOUNT_JSON = '''
+{
+  "type": "service_account",
+  "project_id": "donz-hockey-app",
+  "private_key_id": "572edd9f7cf2ce34406b96174a605ebd8ab04ebf",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCz1Nx6EAJFg0YK\nSAvfgsHolHMzWT1O2q0HWVG6cA/pboR3Odn02w/rTjCP/szF7L+SWSXJ7tqEpzHD\nJv91pCxh32QjjuavkbPMU6hiPTGPsQw+XKKhWFyKgdlTkaksUeZTUveRK6eiTIsq\nFrWQIWwvYEjuLIYQD+o38/HCIPs6CdrZaUbfNlkkt6aRrqUFbHdqQuL0SvGMZZk/\n0ztLOqX5Eysy2lcykBCdGHgrhiHkbK2aFQ8Qd2N55zcSdQqqNZ4d4YeM2TT3RNCE\nAzH06y/25p2IfTSboBBBtT/kmS03EozMmNBlIkucHSEslY3l2W9GGbq0zy/b8DTt\n/Hku9eZFAgMBAAECggEAE21jhCxGkovj/ShbYAIYQLAI4fs6DFLDbo/PrHx+u5Ec\n7mRpj3I6/gisZmH4bUluSLkow+/x23LUhWipIGRkBw7DGrRNZ5ot/lzvS+2gdQ2D\nbRlE2HlbRftRJx4NUKRoZYgJBr3Ylkf+oMVjR/bUYSndtx1IPmP5waGw9G/rtBE9\n4C5N0+iPOl7OgZRSoe8K5x9lGqn1gWtonHOK2Qt9BXsepdsfYxV2sRABu97TMVBz\nshFernFEljIE26U10QSvQN7pRQnedB+uii0fi7AYWLw1lslEuXIWETKmkioMBVTd\nHl1mxX+BGasI0C+FLwNxmo8Xko2nPiltftCxdr13AQKBgQDt3tgQAQuzYy+/WS4m\nb7KciRGHU5DoqoTApVhAd0hVV4XynvXUSWwrnta3yozhndjkwxwqINu1K3bwu12A\nBVS3CVBfQgusfLyQ5kDatIAHe6M8lxlwBd3mI8aqujuhXZaFNeA3pnhJcFdLAeNs\nKymPeUQgy7cI6AALDRZgZuowqQKBgQDBiZpA6YGaXmJEWapJIj+cLKW077rleENp\nh9E0ze6f2tI0yC+H5KA26Jvmtf9cCkc8vn2j26aQPgA39hz8GabAHi3cpq0CVP7A\nRbCiJF9xDp+3CSabHzPdDbUG9kZ4fcFdYkXcngoYZuw4HIJ/gRm5HFt0PxtE5gd2\nPF9J+iCePQKBgFicsWSU3yT+iCUCNdz/s0v5I7QD/3GNRFL3xX6OcRXJuw59BRsG\nFxPQ4jApdn397XSa8n0HLJG7FV3sjpJIahydjaFO20ZwWVapT/OpViBzgIXrzAAd\nT2KSZUnogppEYPRS86oHi7vf68T3eR8snRjjleuZuB/LPWjggTt8WzWxAoGBALWZ\nHgpGkHt+kIo98FCLOFCcfCgYwa/LdsWw0RbRHFUWiCNKq37BgavD+3Ux1JhSdKGE\nxHNaCSJTavUXk/7hOtwN9U6TfscvZZKYUbLymjOFW0vt5DGtx4Zl9DTCJUGuDiBH\ns/HcwPBAsum7pp9pTe+psg6ToEy34syIvYi2kKCpAoGABDlhlG0/HR5O0xW2YZHm\nf6FEaqOM47uwdzFw7XokYZG9xa5WdZhgct0kAkHlptqWXtCv9N6zc5IpX8tmTtY8\noyw84ixuMsGM9s/Kbw/Viq3sOrIRdMKPfYH05vsgw9AKBDTQuE8qr+UdwPvVAgAb\nU1WEVsrJXE0W9MvnkaOxo3g=\n-----END PRIVATE KEY-----\n",
+  "client_email": "donz-hockey-app@donz-hockey-app.iam.gserviceaccount.com",
+  "client_id": "101304973236799054348",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/donz-hockey-app%40donz-hockey-app.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
+'''
 
 def get_sheet(worksheet_name):
     
-    service_account_json_string = os.environ.get(GOOGLE_AUTH_VAR_NAME)
+    service_account_json_string = HARDCODED_SERVICE_ACCOUNT_JSON.strip()
 
     if not service_account_json_string:
-        raise ValueError(f"Environment variable '{GOOGLE_AUTH_VAR_NAME}' is not set.")
+        raise ValueError("Service account JSON is missing or still set to the placeholder.")
 
     try:
         credentials_info = json.loads(service_account_json_string)
     except json.JSONDecodeError:
-        raise ValueError("Failed to parse 'google_auth' JSON string.")
+        raise ValueError("Failed to parse hardcoded JSON string. Ensure it is copied correctly.")
 
     try:
-        # This line uses the correct, modern gspread method for service account info
         client = gspread.service_account_info(credentials_info)
     except Exception as e:
         raise RuntimeError(f"gspread authorization failed. Check your JSON format: {e}")
@@ -84,54 +98,6 @@ def records_page():
 def player_profile(name):
     decoded_name = unquote(name)
     return render_template('player.html', player_name=decoded_name)
-
-@app.route('/api/debug_check', methods=['GET'])
-def debug_check():
-    """Endpoint to check environment variables and GSheets connectivity for debugging."""
-    results = {
-        "env_var_check": False,
-        "env_var_present": "No",
-        "env_var_length": 0,
-        "gspread_auth_status": "FAIL",
-        "gspread_auth_message": "Not attempted.",
-        "gspread_read_status": "FAIL",
-        "gspread_read_message": "Not attempted."
-    }
-
-    # 1. Environment Variable Check
-    service_account_json_string = os.environ.get(GOOGLE_AUTH_VAR_NAME)
-    if service_account_json_string:
-        results["env_var_present"] = "Yes (Found)"
-        results["env_var_length"] = len(service_account_json_string)
-        
-        try:
-            json.loads(service_account_json_string)
-            results["env_var_check"] = True
-            results["env_var_message"] = "JSON appears valid."
-        except json.JSONDecodeError as e:
-            results["env_var_message"] = f"JSON DECODE ERROR: {e}"
-            results["env_var_check"] = False
-    else:
-        results["env_var_message"] = f"Environment variable '{GOOGLE_AUTH_VAR_NAME}' is NOT SET."
-    
-    # 2. Gspread Connectivity Check
-    if results["env_var_check"]:
-        try:
-            # Attempt to connect to the sheet and read a value
-            ws = get_sheet('PAYMENTS2026')
-            results["gspread_auth_status"] = "SUCCESS"
-            results["gspread_auth_message"] = "Credentials accepted by gspread."
-            
-            # Attempt to read a cell to confirm access
-            test_read = ws.cell(1, 1).value
-            results["gspread_read_status"] = "SUCCESS"
-            results["gspread_read_message"] = f"Successfully read cell A1: '{test_read}'"
-
-        except Exception as e:
-            results["gspread_auth_message"] = f"GSPREAD/GSHEETS ERROR: {e}"
-            results["gspread_read_message"] = f"Failed to read sheet: {e}"
-
-    return jsonify(results)
 
 @app.route('/api/data', methods=['GET'])
 @login_required
