@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Records | Donz Hockey{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+    
+    <div class="p-4 border-b border-gray-200 bg-gray-50 flex flex-col gap-3">
+        <div>
+            <h1 class="text-xl font-black text-gray-900 uppercase italic">History</h1>
+            <p class="text-xs text-gray-500">Tap for details</p>
+        </div>
+        <div class="w-full">
+            <input type="text" id="records-search" placeholder="Search..." class="w-full p-2 border border-gray-300 rounded-lg focus:border-yellow-400 outline-none text-sm">
+        </div>
+    </div>
+
+    <div class="table-container max-h-[75vh]">
+        <table class="min-w-full text-left text-sm">
+            <thead class="bg-black text-white">
+                <tr id="table-header">
+                    <th class="sticky-col bg-black text-white text-xs max-w-[110px]">NAME</th>
+                    <th class="bg-yellow-400 text-black text-center font-black text-xs">TOT</th>
+                </tr>
+            </thead>
+            <tbody id="table-body" class="bg-white text-gray-700">
+                <tr><td class="p-6 text-xs">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function loadHistory() {
+        try {
+            const res = await fetch('/api/attendance-history');
+            const data = await res.json();
+            if (data.error) return alert(data.error);
+            renderTable(data);
+        } catch (err) { document.getElementById('table-body').innerHTML = '<tr><td class="p-6">Error loading data</td></tr>'; }
+    }
+
+    function renderTable(data) {
+        const theadRow = document.getElementById('table-header');
+        const tbody = document.getElementById('table-body');
+        
+        theadRow.innerHTML = `
+            <th class="sticky-col bg-black text-white shadow-lg border-r border-gray-800 text-xs py-3 px-2 max-w-[110px]">NAME</th>
+            <th class="bg-yellow-400 text-black text-center font-black border-r border-black px-2 text-xs">TOT</th>
+        `;
+
+        data.dates.forEach(date => {
+            const th = document.createElement('th');
+            th.className = "text-center font-bold text-gray-400 min-w-[50px] bg-black text-xs px-2";
+            const dateObj = new Date(date);
+            th.innerText = isNaN(dateObj) ? date : `${dateObj.getMonth()+1}/${dateObj.getDate()}`; 
+            theadRow.appendChild(th);
+        });
+
+        tbody.innerHTML = '';
+        data.records.forEach(player => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-yellow-50 transition-colors cursor-pointer group";
+            tr.onclick = () => window.location.href = `/player/${encodeURIComponent(player.name)}`;
+
+            let html = `
+                <td class="sticky-col font-bold text-gray-900 group-hover:bg-yellow-50 transition-colors border-r border-gray-100 text-xs py-3 px-2 max-w-[110px] truncate">${player.name}</td>
+                <td class="text-center font-black text-sm text-black bg-gray-100 border-r border-gray-200 group-hover:bg-yellow-200 transition-colors">${player.total}</td>
+            `;
+
+            player.history.forEach(status => {
+                const isPresent = status === 'P';
+                html += `<td class="text-center border-r border-gray-50 text-xs">${isPresent ? '<span class="text-green-600 font-black">✓</span>' : '<span class="text-gray-200">-</span>'}</td>`;
+            });
+
+            tr.innerHTML = html;
+            tbody.appendChild(tr);
+        });
+    }
+
+    document.getElementById('records-search').addEventListener('input', function(e) {
+        const term = e.target.value.toLowerCase();
+        document.querySelectorAll('#table-body tr').forEach(row => {
+            const name = row.querySelector('td').innerText.toLowerCase();
+            row.style.display = name.includes(term) ? '' : 'none';
+        });
+    });
+
+    loadHistory();
+</script>
+{% endblock %}

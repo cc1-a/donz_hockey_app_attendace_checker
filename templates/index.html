@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Payments | Donz Hockey{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white p-4 rounded-xl shadow-md mb-4 border border-gray-200">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Billing Month</label>
+                <select id="month-select" class="w-full p-2 bg-gray-50 border-2 border-gray-200 rounded-lg font-bold text-gray-800 focus:border-yellow-400 outline-none text-sm">
+                    <option>Loading...</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Find Player</label>
+                <input type="text" id="search-input" placeholder="Name..." class="w-full p-2 bg-gray-50 border-2 border-gray-200 rounded-lg outline-none focus:border-yellow-400 transition text-sm">
+            </div>
+        </div>
+        <div id="status-bar" class="mt-2 text-sm text-center h-5 font-bold text-gray-500">
+            {% if not is_admin %}
+            <span class="text-red-500">VIEW ONLY MODE</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="bg-white shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+        <div id="loading-screen" class="p-10 text-center">
+            <p class="text-gray-500 animate-pulse font-mono text-sm">SYNCING DATA...</p>
+        </div>
+
+        <div class="overflow-x-auto w-full">
+            <table class="min-w-full hidden" id="main-table">
+                <thead class="bg-black text-yellow-400">
+                    <tr>
+                        <th class="px-4 py-3 text-left whitespace-nowrap text-sm">Player</th>
+                        <th class="hidden md:table-cell px-4 py-3 text-left whitespace-nowrap text-sm">Position</th>
+                        <th class="px-4 py-3 text-center bg-yellow-400 text-black border-l-4 border-black font-black whitespace-nowrap text-sm">Paid?</th>
+                    </tr>
+                </thead>
+                <tbody id="player-list" class="bg-white divide-y divide-gray-100"></tbody>
+            </table>
+        </div>
+        <div id="no-results" class="hidden p-8 text-center text-gray-500 text-sm">No players found.</div>
+    </div>
+</div>
+
+<script>
+    const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+    let allPlayers = [], allMonths = [], currentMonth = "";
+    const statusEl = document.getElementById('status-bar');
+
+    async function loadData() {
+        try {
+            const res = await fetch('/api/data');
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+
+            allPlayers = data.players;
+            allMonths = data.months;
+            
+            const monthSelect = document.getElementById('month-select');
+            monthSelect.innerHTML = '';
+            allMonths.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.innerText = m;
+                monthSelect.appendChild(opt);
+            });
+
+            const currentMonthName = new Date().toLocaleString('default', { month: 'long' });
+            if (allMonths.includes(currentMonthName)) monthSelect.value = currentMonthName;
+            else monthSelect.value = allMonths[0];
+
+            document.getElementById('loading-screen').classList.add('hidden');
+            document.getElementById('main-table').classList.remove('hidden');
+            renderList();
+        } catch (err) {
+            document.getElementById('loading-screen').innerHTML = `<p class="text-red-500 text-sm">${err.message}</p>`;
+        }
+    }
+
+    function renderList() {
+        const tbody = document.getElementById('player-list');
+        const search = document.getElementById('search-input').value.toLowerCase();
+        currentMonth = document.getElementById('month-select').value;
+        
+        tbody.innerHTML = '';
+        let count = 0;
+        allPlayers.forEach(p => {
+            if (p.name.toLowerCase().includes(search)) {
+                count++;
+                const isPaid = p.payments[currentMonth];
+                const tr = document.createElement('tr');
+                if(isPaid) tr.classList.add('bg-yellow-50');
+                
+                const disabledAttr = IS_ADMIN ? '' : 'disabled';
+                const opacityClass = IS_ADMIN ? '' : 'opacity-50 cursor-not-allowed';
+
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-bold text-gray-900 whitespace-nowrap max-w-[140px] truncate text-sm">${p.name}</td>
+                    <td class="hidden md:table-cell px-4 py-3 text-sm text-gray-500 whitespace-nowrap">${p.position}</td>
+                    <td class="px-4 py-3 text-center border-l border-gray-100">
+                        <input type="checkbox" class="custom-checkbox scale-90 ${opacityClass}" ${isPaid ? 'checked' : ''} ${disabledAttr} onchange="togglePayment('${p.id}', this)">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+        });
+        document.getElementById('no-results').style.display = count === 0 ? 'block' : 'none';
+    }
+
+    async function togglePayment(playerId, checkbox) {
+        if(!IS_ADMIN) return;
+        const isChecked = checkbox.checked;
+        statusEl.innerText = "SAVING...";
+        statusEl.className = "mt-2 text-sm text-center h-5 font-bold text-yellow-600";
+        try {
+            const res = await fetch('/api/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: playerId, month: currentMonth, status: isChecked })
+            });
+            const result = await res.json();
+            if (result.success) {
+                statusEl.innerText = "SAVED ✓";
+                statusEl.className = "mt-2 text-sm text-center h-5 font-black text-green-600";
+                const player = allPlayers.find(p => p.id == playerId);
+                if(player) player.payments[currentMonth] = isChecked;
+                const row = checkbox.closest('tr');
+                if(isChecked) row.classList.add('bg-yellow-50');
+                else row.classList.remove('bg-yellow-50');
+                setTimeout(() => { statusEl.innerText = ""; }, 2000);
+            } else throw new Error(result.message);
+        } catch (err) {
+            checkbox.checked = !isChecked;
+            statusEl.innerText = "ERROR";
+            statusEl.className = "mt-2 text-sm text-center h-5 font-black text-red-600";
+        }
+    }
+
+    document.getElementById('search-input').addEventListener('input', renderList);
+    document.getElementById('month-select').addEventListener('change', renderList);
+    loadData();
+</script>
+{% endblock %}

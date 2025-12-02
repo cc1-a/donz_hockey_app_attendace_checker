@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Attendance | Donz Hockey{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto bg-white rounded-xl shadow-xl border-2 border-yellow-400 overflow-hidden">
+    
+    <div class="p-4 bg-gray-50 border-b border-gray-200">
+        <h1 class="text-2xl font-black text-gray-900 mb-4 uppercase italic">
+            Daily <span class="text-yellow-500">Attendance</span>
+        </h1>
+        
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Select Date</label>
+                <input type="date" id="date-picker" onchange="loadAttendanceForDate()" class="w-full p-2 border-2 border-gray-200 rounded-lg font-bold text-gray-800 focus:border-yellow-400 outline-none text-sm">
+            </div>
+            <div>
+                <input type="text" id="search-input" placeholder="Filter players..." class="w-full p-2 bg-white border border-gray-300 rounded-lg text-sm focus:border-yellow-400 outline-none">
+            </div>
+        </div>
+    </div>
+
+    <div class="overflow-y-auto max-h-[60vh] relative">
+        <div id="roster-loader" class="hidden absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-20">
+            <p class="font-black text-yellow-500 animate-pulse">LOADING...</p>
+        </div>
+
+        <table class="min-w-full divide-y divide-gray-100">
+            <tbody id="roster-list" class="divide-y divide-gray-100">
+                <tr><td class="p-4 text-center text-gray-500 text-sm">Loading roster...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="p-4 bg-white border-t border-gray-200 flex justify-between items-center">
+        <span id="count-display" class="font-bold text-gray-600 text-sm">0 Selected</span>
+        {% if is_admin %}
+        <button onclick="submitAttendance()" id="submit-btn" class="btn-primary py-2 px-6 rounded-lg shadow-lg transform active:scale-95 text-sm">Save</button>
+        {% else %}
+        <span class="text-red-500 font-bold text-xs uppercase border border-red-200 px-3 py-1 rounded bg-red-50">View Only</span>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+    let players = [];
+    
+    window.onload = function() {
+        document.getElementById('date-picker').valueAsDate = new Date();
+        loadRoster();
+    };
+
+    async function loadRoster() {
+        try {
+            const res = await fetch('/api/attendance-roster');
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            players = data;
+            renderList(players);
+            loadAttendanceForDate();
+        } catch (err) { alert(err.message); }
+    }
+
+    async function loadAttendanceForDate() {
+        const date = document.getElementById('date-picker').value;
+        if (!date) return;
+        document.getElementById('roster-loader').classList.remove('hidden');
+        try {
+            const res = await fetch(`/api/get-attendance-for-date?date=${date}`);
+            const presentNames = await res.json();
+            const checkboxes = document.querySelectorAll('.attendance-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = presentNames.includes(cb.value);
+                const row = cb.closest('tr');
+                if(cb.checked) row.classList.add('bg-yellow-50');
+                else row.classList.remove('bg-yellow-50');
+            });
+            updateCount();
+        } catch (err) { console.error(err); } 
+        finally { document.getElementById('roster-loader').classList.add('hidden'); }
+    }
+
+    function renderList(data) {
+        const tbody = document.getElementById('roster-list');
+        tbody.innerHTML = '';
+        data.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-gray-50 transition";
+            const disabledAttr = IS_ADMIN ? '' : 'disabled';
+            const opacityClass = IS_ADMIN ? '' : 'opacity-50';
+            tr.innerHTML = `
+                <td class="px-4 py-3">
+                    <label class="flex items-center space-x-3 cursor-pointer w-full h-full">
+                        <input type="checkbox" value="${p.id}" class="custom-checkbox attendance-checkbox scale-90 ${opacityClass}" ${disabledAttr} onchange="toggleRow(this)">
+                        <span class="font-medium text-gray-800 text-sm truncate max-w-[200px] block">${p.name}</span>
+                    </label>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function toggleRow(checkbox) {
+        if(!IS_ADMIN) return;
+        const row = checkbox.closest('tr');
+        if(checkbox.checked) row.classList.add('bg-yellow-50');
+        else row.classList.remove('bg-yellow-50');
+        updateCount();
+    }
+
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        document.querySelectorAll('#roster-list tr').forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(term) ? '' : 'none';
+        });
+    });
+
+    function updateCount() {
+        const count = document.querySelectorAll('.attendance-checkbox:checked').length;
+        document.getElementById('count-display').innerText = `${count} Present`;
+    }
+
+    async function submitAttendance() {
+        if(!IS_ADMIN) return;
+        const date = document.getElementById('date-picker').value;
+        const btn = document.getElementById('submit-btn');
+        const checkboxes = document.querySelectorAll('.attendance-checkbox:checked');
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+
+        btn.disabled = true;
+        btn.innerText = "SAVING...";
+
+        try {
+            const res = await fetch('/api/submit-attendance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: date, ids: ids })
+            });
+            const result = await res.json();
+            if (result.success) {
+                btn.innerText = "SAVED!";
+                setTimeout(() => btn.innerText = "Save", 1500);
+            } else alert(result.message);
+        } catch (err) { alert("Network Error"); } 
+        finally { btn.disabled = false; if(btn.innerText==="SAVING...") btn.innerText="Save"; }
+    }
+</script>
+{% endblock %}

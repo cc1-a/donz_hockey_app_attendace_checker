@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Donz Hockey{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='base.css') }}">
+</head>
+<body class="opacity-0 transition-opacity duration-500 bg-gray-100">
+
+    <!-- LOADER -->
+    <div id="app-loader">
+        <img src="{{ url_for('static', filename='img/logo.png') }}" class="loader-logo" alt="Logo">
+        <div class="loading-bar-container">
+            <div class="loading-bar-fill" id="progress-bar"></div>
+        </div>
+        <p class="text-yellow-500 font-mono text-xs mt-3 tracking-widest uppercase">Initializing System...</p>
+    </div>
+
+    <!-- CONTENT -->
+    <div id="main-content">
+        <!-- Nav -->
+        <nav class="bg-black pt-6 pb-4 px-2 shadow-xl sticky top-0 z-50 border-b-4 border-yellow-400">
+            <div class="max-w-7xl mx-auto flex flex-col items-center relative">
+                
+                <!-- Logout (Top Right) -->
+                <a href="/logout" class="absolute right-0 top-0 text-gray-500 hover:text-red-500 text-xs font-bold uppercase tracking-wide">
+                    Logout
+                </a>
+
+                <!-- BRANDING HEADER -->
+                <div class="flex flex-col items-center justify-center gap-2 mb-4">
+                    <!-- Bigger Logo -->
+                    <img src="{{ url_for('static', filename='img/logo.png') }}" class="h-20 w-auto block drop-shadow-lg" alt="Logo">
+                    
+                    <!-- Text Restored -->
+                    <span class="text-white font-black text-3xl tracking-tighter italic leading-none">
+                        DONZ<span class="text-yellow-400">HOCKEY</span>
+                    </span>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex w-full gap-2 justify-between max-w-md">
+                    <a href="/" class="nav-link flex-1 text-center px-1 py-3 rounded-lg text-xs font-bold uppercase tracking-wide truncate {% if request.path == '/' %}nav-active{% else %}nav-inactive{% endif %}">
+                        Payments
+                    </a>
+                    <a href="/attendance" class="nav-link flex-1 text-center px-1 py-3 rounded-lg text-xs font-bold uppercase tracking-wide truncate {% if request.path == '/attendance' %}nav-active{% else %}nav-inactive{% endif %}">
+                        Attendance
+                    </a>
+                    <a href="/records" class="nav-link flex-1 text-center px-1 py-3 rounded-lg text-xs font-bold uppercase tracking-wide truncate {% if request.path == '/records' %}nav-active{% else %}nav-inactive{% endif %}">
+                        Records
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        <main class="px-2 md:px-4 py-4 mb-20">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script>
+        window.addEventListener('load', function() {
+            const bar = document.getElementById('progress-bar');
+            const loader = document.getElementById('app-loader');
+            const body = document.body;
+            body.classList.remove('opacity-0');
+            setTimeout(() => { bar.style.width = "70%"; }, 100);
+            setTimeout(() => { 
+                bar.style.width = "100%"; 
+                setTimeout(() => {
+                    loader.style.opacity = '0';
+                    setTimeout(() => { loader.style.display = 'none'; }, 500);
+                }, 400);
+            }, 800);
+        });
+    </script>
+</body>
+</html>
