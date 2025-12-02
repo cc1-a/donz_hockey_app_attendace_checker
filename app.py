@@ -4,47 +4,33 @@ from urllib.parse import unquote
 import functools
 import os
 import json
-
 import auth
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('APP_SECRET_KEY', 'a_strong_fallback_secret_for_local_dev_only') 
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'a_temporary_fallback_key') 
 
 SPREADSHEET_TITLE = 'Donz Hockey Main'
 
-HARDCODED_SERVICE_ACCOUNT_JSON = '''
-{
-  "type": "service_account",
-  "project_id": "donz-hockey-app",
-  "private_key_id": "572edd9f7cf2ce34406b96174a605ebd8ab04ebf",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCz1Nx6EAJFg0YK\nSAvfgsHolHMzWT1O2q0HWVG6cA/pboR3Odn02w/rTjCP/szF7L+SWSXJ7tqEpzHD\nJv91pCxh32QjjuavkbPMU6hiPTGPsQw+XKKhWFyKgdlTkaksUeZTUveRK6eiTIsq\nFrWQIWwvYEjuLIYQD+o38/HCIPs6CdrZaUbfNlkkt6aRrqUFbHdqQuL0SvGMZZk/\n0ztLOqX5Eysy2lcykBCdGHgrhiHkbK2aFQ8Qd2N55zcSdQqqNZ4d4YeM2TT3RNCE\nAzH06y/25p2IfTSboBBBtT/kmS03EozMmNBlIkucHSEslY3l2W9GGbq0zy/b8DTt\n/Hku9eZFAgMBAAECggEAE21jhCxGkovj/ShbYAIYQLAI4fs6DFLDbo/PrHx+u5Ec\n7mRpj3I6/gisZmH4bUluSLkow+/x23LUhWipIGRkBw7DGrRNZ5ot/lzvS+2gdQ2D\nbRlE2HlbRftRJx4NUKRoZYgJBr3Ylkf+oMVjR/bUYSndtx1IPmP5waGw9G/rtBE9\n4C5N0+iPOl7OgZRSoe8K5x9lGqn1gWtonHOK2Qt9BXsepdsfYxV2sRABu97TMVBz\nshFernFEljIE26U10QSvQN7pRQnedB+uii0fi7AYWLw1lslEuXIWETKmkioMBVTd\nHl1mxX+BGasI0C+FLwNxmo8Xko2nPiltftCxdr13AQKBgQDt3tgQAQuzYy+/WS4m\nb7KciRGHU5DoqoTApVhAd0hVV4XynvXUSWwrnta3yozhndjkwxwqINu1K3bwu12A\nBVS3CVBfQgusfLyQ5kDatIAHe6M8lxlwBd3mI8aqujuhXZaFNeA3pnhJcFdLAeNs\nKymPeUQgy7cI6AALDRZgZuowqQKBgQDBiZpA6YGaXmJEWapJIj+cLKW077rleENp\nh9E0ze6f2tI0yC+H5KA26Jvmtf9cCkc8vn2j26aQPgA39hz8GabAHi3cpq0CVP7A\nRbCiJF9xDp+3CSabHzPdDbUG9kZ4fcFdYkXcngoYZuw4HIJ/gRm5HFt0PxtE5gd2\nPF9J+iCePQKBgFicsWSU3yT+iCUCNdz/s0v5I7QD/3GNRFL3xX6OcRXJuw59BRsG\nFxPQ4jApdn397XSa8n0HLJG7FV3sjpJIahydjaFO20ZwWVapT/OpViBzgIXrzAAd\nT2KSZUnogppEYPRS86oHi7vf68T3eR8snRjjleuZuB/LPWjggTt8WzWxAoGBALWZ\nHgpGkHt+kIo98FCLOFCcfCgYwa/LdsWw0RbRHFUWiCNKq37BgavD+3Ux1JhSdKGE\nxHNaCSJTavUXk/7hOtwN9U6TfscvZZKYUbLymjOFW0vt5DGtx4Zl9DTCJUGuDiBH\ns/HcwPBAsum7pp9pTe+psg6ToEy34syIvYi2kKCpAoGABDlhlG0/HR5O0xW2YZHm\nf6FEaqOM47uwdzFw7XokYZG9xa5WdZhgct0kAkHlptqWXtCv9N6zc5IpX8tmTtY8\noyw84ixuMsGM9s/Kbw/Viq3sOrIRdMKPfYH05vsgw9AKBDTQuE8qr+UdwPvVAgAb\nU1WEVsrJXE0W9MvnkaOxo3g=\n-----END PRIVATE KEY-----\n",
-  "client_email": "donz-hockey-app@donz-hockey-app.iam.gserviceaccount.com",
-  "client_id": "101304973236799054348",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/donz-hockey-app%40donz-hockey-app.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
-'''
+try:
+    google_auth_json_string = os.environ.get('GOOGLE_AUTH')
+    
+    if google_auth_json_string:
+        CREDENTIALS_CONFIG = json.loads(google_auth_json_string)
+    else:
+        print("WARNING: GOOGLE_AUTH environment variable not found. Using empty config.")
+        CREDENTIALS_CONFIG = {} 
+
+except json.JSONDecodeError as e:
+    print(f"ERROR: Could not decode GOOGLE_AUTH environment variable. Check the JSON format: {e}")
+    CREDENTIALS_CONFIG = {}
+except Exception as e:
+    print(f"An unexpected error occurred during credential setup: {e}")
+    CREDENTIALS_CONFIG = {}
+
 
 def get_sheet(worksheet_name):
+    client = gspread.service_account_from_dict(CREDENTIALS_CONFIG)
     
-    service_account_json_string = HARDCODED_SERVICE_ACCOUNT_JSON.strip()
-
-    if not service_account_json_string:
-        raise ValueError("Service account JSON is missing or still set to the placeholder.")
-
-    try:
-        credentials_info = json.loads(service_account_json_string)
-    except json.JSONDecodeError:
-        raise ValueError("Failed to parse hardcoded JSON string. Ensure it is copied correctly.")
-
-    try:
-        client = gspread.service_account_info(credentials_info)
-    except Exception as e:
-        raise RuntimeError(f"gspread authorization failed. Check your JSON format: {e}")
-
     sheet = client.open(SPREADSHEET_TITLE)
     return sheet.worksheet(worksheet_name)
 
