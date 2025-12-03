@@ -7,7 +7,7 @@ import json
 import auth
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'a_temporary_fallback_key') 
+app.secret_key = os.environ.get('SECRET_KEY', 'a_temporary_fallback_key') 
 
 SPREADSHEET_TITLE = 'Donz Hockey Main'
 
