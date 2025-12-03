@@ -11,11 +11,19 @@ app.secret_key = os.environ.get('SECRET_KEY', 'a_temporary_fallback_key')
 
 SPREADSHEET_TITLE = 'Donz Hockey Main'
 
+# --- CREDENTIALS SETUP WITH VERCEL FIX ---
 try:
     google_auth_json_string = os.environ.get('GOOGLE_AUTH')
     
     if google_auth_json_string:
         CREDENTIALS_CONFIG = json.loads(google_auth_json_string)
+        
+        # CRITICAL FIX FOR VERCEL:
+        # Vercel environment variables often escape newlines as literal '\n' characters.
+        # This replaces them with actual newlines so the crypto library can read the key.
+        if 'private_key' in CREDENTIALS_CONFIG:
+            CREDENTIALS_CONFIG['private_key'] = CREDENTIALS_CONFIG['private_key'].replace('\\n', '\n')
+            
     else:
         print("WARNING: GOOGLE_AUTH environment variable not found. Using empty config.")
         CREDENTIALS_CONFIG = {} 
@@ -29,8 +37,8 @@ except Exception as e:
 
 
 def get_sheet(worksheet_name):
+    # Using the config dictionary directly
     client = gspread.service_account_from_dict(CREDENTIALS_CONFIG)
-    
     sheet = client.open(SPREADSHEET_TITLE)
     return sheet.worksheet(worksheet_name)
 
@@ -247,9 +255,4 @@ def get_player_details():
             if status.upper() == 'P': attended_dates.append(date)
         attended_dates.sort(reverse=True)
         return jsonify({"name": name, "total": len(attended_dates), "dates": attended_dates})
-    except Exception as e: 
-        print(f"Error fetching player details: {e}")
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run()
+    except Exception as e:
