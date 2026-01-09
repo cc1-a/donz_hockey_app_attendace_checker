@@ -4,85 +4,236 @@ from urllib.parse import unquote
 import functools
 import os
 import json
+import requests
+import datetime
+import traceback
+from apscheduler.schedulers.background import BackgroundScheduler
+from dotenv import load_dotenv
 import auth
+
+load_dotenv() 
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'vB9$fG^kL@7pQzR3sY!wX4cH&m2dEaT5uI') 
 
 SPREADSHEET_TITLE = 'Donz Hockey Main'
 
+# --- GOOGLE SHEETS SETUP ---
 try:
     google_auth_json_string = os.environ.get('GOOGLE_AUTH')
-    
     if google_auth_json_string:
         CREDENTIALS_CONFIG = json.loads(google_auth_json_string)
         if 'private_key' in CREDENTIALS_CONFIG:
             CREDENTIALS_CONFIG['private_key'] = CREDENTIALS_CONFIG['private_key'].replace('\\n', '\n')
     else:
         CREDENTIALS_CONFIG = {} 
-
 except Exception as e:
     print(f"Error loading credentials: {e}")
     CREDENTIALS_CONFIG = {}
 
 def get_sheet(worksheet_name):
+    if not CREDENTIALS_CONFIG:
+        raise Exception("Google Credentials not configured.")
     client = gspread.service_account_from_dict(CREDENTIALS_CONFIG)
     sheet = client.open(SPREADSHEET_TITLE)
     return sheet.worksheet(worksheet_name)
 
-def login_required(f):
+# --- DECORATORS ---
+
+def admin_required(f):
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user' not in session:
-            return redirect(url_for('login'))
+        if session.get('role') != 'admin':
+            return jsonify({"success": False, "message": "Admin login required"}), 403
         return f(*args, **kwargs)
     return decorated_function
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        if auth.verify_user(username, password):
-            session['user'] = username
-            session['role'] = auth.get_role(username)
-            return redirect(url_for('index'))
+# --- WHATSAPP AUTOMATION ---
+
+def send_donz_announcement(message):
+    """Sends message via Wabot API"""
+    url = "https://app.wabot.my/api/send_group"
+    
+    # --- LIVE GROUP ID (DONZ HOCKEY) ---
+    group_id = "120363334408919344@g.us"
+    # -----------------------------------
+    
+    instance_id = "696103D4D811C"
+    access_token = "6935797c735a5"
+    
+    payload = {
+        "group_id": group_id,
+        "type": "text",
+        "message": message,
+        "instance_id": instance_id,
+        "access_token": access_token
+    }
+
+    try:
+        # Timeout added to prevent server hanging
+        response = requests.post(url, json=payload, timeout=15)
+        data = response.json()
+        if response.status_code == 200 and data.get("status") == "success":
+            print(f"WhatsApp Sent! Queue ID: {data.get('details', {}).get('queue_id')}")
+            return True
         else:
-            return render_template('login.html', error="Invalid Credentials")
+            print(f"WhatsApp Failed: {data}")
+            return False
+    except Exception as e:
+        print(f"WhatsApp Connection Error: {e}")
+        return False
+
+# --- REPORT GENERATORS ---
+
+def generate_payment_report():
+    print("Generating Payment Report...")
+    try:
+        ws = get_sheet('PAYMENTS2026')
+        all_data = ws.get_all_values()
+        if not all_data: return False
+        
+        headers = all_data[0]
+        current_month = datetime.datetime.now().strftime("%B")
+        
+        if current_month not in headers:
+            print(f"Month {current_month} missing.")
+            return False
+
+        col_index = headers.index(current_month)
+        paid = []
+        not_paid = []
+        
+        for row in all_data[1:]:
+            if len(row) < 2 or not row[0]: continue
+            name = row[1]
+            status = row[col_index] if len(row) > col_index else "FALSE"
             
-    return render_template('login.html')
+            if str(status).upper() == 'TRUE':
+                paid.append(name)
+            else:
+                not_paid.append(name)
+        
+        msg = f"📢 *DONZ HOCKEY PAYMENT UPDATE*\n"
+        msg += f"🗓️ Month: *{current_month}*\n\n"
+        msg += "✅ *PAID:*\n" + ("\n".join([f"- {p}" for p in paid]) if paid else "- None yet") + "\n\n"
+        msg += "❌ *NOT PAID:*\n" + ("\n".join([f"- {p}" for p in not_paid]) if not_paid else "- Everyone paid!") + "\n"
+        msg += "\n_Please settle dues immediately._"
+        
+        return send_donz_announcement(msg)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+def generate_attendance_report(date_str):
+    print(f"Generating Attendance Report for {date_str}...")
+    try:
+        ws = get_sheet('ATTENDANCE 2026')
+        
+        # SAFE METHOD: Get all values at once to avoid column length mismatch
+        all_data = ws.get_all_values()
+        if not all_data: return "SHEET_EMPTY"
+
+        headers = all_data[0]
+        
+        if date_str not in headers:
+            print(f"Date {date_str} not found in headers: {headers}")
+            return "DATE_NOT_FOUND" 
+
+        col_index = headers.index(date_str)
+        present_list = []
+
+        # Iterate through all rows (skipping header)
+        for row in all_data[1:]:
+            # Ensure row has enough columns
+            if len(row) <= col_index: continue
+            
+            name = row[0] # Name is always first column
+            status = row[col_index]
+            
+            if name and status.upper() == 'P':
+                present_list.append(name)
+        
+        # Format Date
+        try:
+            date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+            nice_date = date_obj.strftime("%d %b %Y")
+        except:
+            nice_date = date_str
+
+        count = len(present_list)
+        
+        msg = f"🏑 *DONZ HOCKEY ATTENDANCE*\n"
+        msg += f"📅 Date: *{nice_date}*\n\n"
+        msg += f"✅ *Present ({count}):*\n"
+        
+        if present_list:
+            for p in present_list:
+                msg += f"- {p}\n"
+        else:
+            msg += "- No attendance recorded.\n"
+            
+        result = send_donz_announcement(msg)
+        return "SUCCESS" if result else "WHATSAPP_ERROR"
+
+    except Exception as e:
+        traceback.print_exc() # Print full error to console
+        return str(e)
+
+# --- SCHEDULER ---
+def scheduled_job():
+    day = datetime.datetime.now().day
+    if day in [10, 20, 30]:
+        print("Auto-sending payment report...")
+        generate_payment_report()
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=scheduled_job, trigger="cron", hour=10)
+scheduler.start()
+
+# --- ROUTES ---
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    referrer = request.referrer or url_for('index')
+    
+    if auth.verify_user(username, password):
+        session['user'] = username
+        session['role'] = auth.get_role(username)
+        return redirect(referrer)
+    else:
+        sep = '&' if '?' in referrer else '?'
+        return redirect(f"{referrer}{sep}login_error=1")
 
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    return redirect(url_for('index'))
 
 @app.route('/')
-@login_required
 def index():
     is_admin = session.get('role') == 'admin'
     return render_template('index.html', is_admin=is_admin)
 
 @app.route('/attendance')
-@login_required
 def attendance_page():
     is_admin = session.get('role') == 'admin'
     return render_template('attendance.html', is_admin=is_admin)
 
 @app.route('/records')
-@login_required
 def records_page():
     return render_template('records.html')
 
 @app.route('/player/<path:name>')
-@login_required
 def player_profile(name):
     decoded_name = unquote(name)
     return render_template('player.html', player_name=decoded_name)
 
+# --- API ROUTES ---
+
 @app.route('/api/data', methods=['GET'])
-@login_required
 def get_payment_data():
     try:
         ws = get_sheet('PAYMENTS2026')
@@ -103,15 +254,11 @@ def get_payment_data():
             players.append({"id": row[0], "name": row[1], "position": row[2] if len(row)>2 else "", "payments": payment_status})
         return jsonify({"months": months, "players": players})
     except Exception as e: 
-        print(f"Error fetching payment data: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/update', methods=['POST'])
-@login_required
+@admin_required
 def update_payment():
-    if session.get('role') != 'admin':
-        return jsonify({"success": False, "message": "Unauthorized"}), 403
-
     data = request.json
     try:
         ws = get_sheet('PAYMENTS2026')
@@ -122,26 +269,52 @@ def update_payment():
         ws.update_cell(cell.row, col_index, data['status'])
         return jsonify({"success": True})
     except Exception as e: 
-        print(f"Error updating payment: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
+# --- WHATSAPP ROUTES (Robust Error Handling) ---
+
+@app.route('/api/send-payment-report', methods=['POST'])
+@admin_required
+def manual_send_report():
+    success = generate_payment_report()
+    if success: return jsonify({"success": True, "message": "Payment Report Sent!"})
+    else: return jsonify({"success": False, "message": "Failed. Check server logs."}), 500
+
+@app.route('/api/send-attendance-report', methods=['POST'])
+@admin_required
+def manual_send_attendance():
+    try:
+        data = request.json
+        date_str = data.get('date')
+        if not date_str: return jsonify({"success": False, "message": "No date provided"}), 400
+        
+        result_code = generate_attendance_report(date_str)
+        
+        if result_code == "SUCCESS":
+            return jsonify({"success": True, "message": f"Report Sent for {date_str}!"})
+        elif result_code == "DATE_NOT_FOUND":
+            return jsonify({"success": False, "message": "Date not found in Sheet. Did you SAVE first?"}), 404
+        elif result_code == "WHATSAPP_ERROR":
+            return jsonify({"success": False, "message": "Wabot API Error (Check Quota/Connection)."}), 502
+        else:
+            # If it's another error, return it in the message so we can see what it is
+            return jsonify({"success": False, "message": f"Internal Error: {result_code}"}), 500
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"Server Crash: {str(e)}"}), 500
+
 @app.route('/api/attendance-roster', methods=['GET'])
-@login_required
 def get_attendance_roster():
     try:
         ws = get_sheet('ATTENDANCE 2026')
         names_column = ws.col_values(1)
-        players = []
-        for name in names_column[1:]:
-            if name.strip():
-                players.append({"id": name, "name": name})
+        players = [{"id": name, "name": name} for name in names_column[1:] if name.strip()]
         return jsonify(players)
     except Exception as e: 
-        print(f"Error fetching roster: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get-attendance-for-date', methods=['GET'])
-@login_required
 def get_attendance_for_date():
     date_str = request.args.get('date')
     if not date_str: return jsonify([])
@@ -159,15 +332,11 @@ def get_attendance_for_date():
                 present_players.append(names_column[i])
         return jsonify(present_players)
     except Exception as e: 
-        print(f"Error fetching attendance for date: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/submit-attendance', methods=['POST'])
-@login_required
+@admin_required
 def submit_attendance():
-    if session.get('role') != 'admin':
-        return jsonify({"success": False, "message": "Unauthorized"}), 403
-
     data = request.json
     date_str = data.get('date')
     present_names = data.get('ids', [])
@@ -199,11 +368,9 @@ def submit_attendance():
         return jsonify({"success": True, "message": f"Saved {date_str}"})
 
     except Exception as e: 
-        print(f"Error submitting attendance: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/attendance-history', methods=['GET'])
-@login_required
 def get_attendance_history():
     try:
         ws = get_sheet('ATTENDANCE 2026')
@@ -222,11 +389,9 @@ def get_attendance_history():
             records.append({"name": name, "history": row_data, "total": total_present})
         return jsonify({"dates": dates, "records": records})
     except Exception as e: 
-        print(f"Error fetching history: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/player-details', methods=['GET'])
-@login_required
 def get_player_details():
     name = request.args.get('name')
     if not name: return jsonify({"error": "No name provided"})
@@ -244,8 +409,7 @@ def get_player_details():
         attended_dates.sort(reverse=True)
         return jsonify({"name": name, "total": len(attended_dates), "dates": attended_dates})
     except Exception as e: 
-        print(f"Error fetching player details: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=False, use_reloader=False)
