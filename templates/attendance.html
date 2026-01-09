@@ -32,10 +32,21 @@
         </table>
     </div>
 
-    <div class="p-4 bg-white border-t border-gray-200 flex justify-between items-center">
+    <div class="p-4 bg-white border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-3">
         <span id="count-display" class="font-bold text-gray-600 text-sm">0 Selected</span>
+        
         {% if is_admin %}
-        <button onclick="submitAttendance()" id="submit-btn" class="btn-primary py-2 px-6 rounded-lg shadow-lg transform active:scale-95 text-sm">Save</button>
+        <div class="flex gap-2 w-full md:w-auto">
+            <!-- WHATSAPP BUTTON -->
+            <button onclick="triggerWhatsApp()" id="wa-btn" class="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg shadow-lg transform active:scale-95 text-xs font-black uppercase hover:bg-green-700 transition">
+                📱 Send Report
+            </button>
+            
+            <!-- SAVE BUTTON -->
+            <button onclick="submitAttendance()" id="submit-btn" class="flex-1 btn-primary py-2 px-6 rounded-lg shadow-lg transform active:scale-95 text-sm font-bold bg-black text-yellow-400">
+                SAVE
+            </button>
+        </div>
         {% else %}
         <span class="text-red-500 font-bold text-xs uppercase border border-red-200 px-3 py-1 rounded bg-red-50">View Only</span>
         {% endif %}
@@ -140,10 +151,60 @@
             const result = await res.json();
             if (result.success) {
                 btn.innerText = "SAVED!";
-                setTimeout(() => btn.innerText = "Save", 1500);
+                setTimeout(() => btn.innerText = "SAVE", 1500);
             } else alert(result.message);
         } catch (err) { alert("Network Error"); } 
-        finally { btn.disabled = false; if(btn.innerText==="SAVING...") btn.innerText="Save"; }
+        finally { btn.disabled = false; if(btn.innerText==="SAVING...") btn.innerText="SAVE"; }
+    }
+
+    async function triggerWhatsApp() {
+        if(!IS_ADMIN) return;
+        const date = document.getElementById('date-picker').value;
+        
+        if(!confirm(`Send Attendance Report for ${date} to WhatsApp?`)) return;
+
+        const btn = document.getElementById('wa-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = "⏳ Sending...";
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/api/send-attendance-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: date })
+            });
+            
+            // Handle non-JSON responses (Server Crash/500)
+            if (!res.ok) {
+                const text = await res.text();
+                try {
+                    const jsonError = JSON.parse(text);
+                    alert("❌ Error: " + jsonError.message);
+                } catch(e) {
+                    alert("❌ Server Error (500): The server crashed. Check console.");
+                    console.error("Server Response:", text);
+                }
+                return;
+            }
+
+            const data = await res.json();
+            
+            if(data.success) {
+                alert("✅ " + data.message);
+                btn.innerHTML = "✅ SENT!";
+            } else {
+                alert("❌ " + data.message);
+                btn.innerHTML = "❌ ERROR";
+            }
+        } catch (err) {
+            alert("❌ Connection Error: " + err.message);
+        } finally {
+            setTimeout(() => { 
+                btn.innerHTML = originalText; 
+                btn.disabled = false;
+            }, 2000);
+        }
     }
 </script>
 {% endblock %}
