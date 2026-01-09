@@ -3,6 +3,7 @@
 
 {% block content %}
 <div class="max-w-4xl mx-auto">
+    <!-- Filters & Admin Panel -->
     <div class="bg-white p-4 rounded-xl shadow-md mb-4 border border-gray-200">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -16,13 +17,21 @@
                 <input type="text" id="search-input" placeholder="Name..." class="w-full p-2 bg-gray-50 border-2 border-gray-200 rounded-lg outline-none focus:border-yellow-400 transition text-sm">
             </div>
         </div>
-        <div id="status-bar" class="mt-2 text-sm text-center h-5 font-bold text-gray-500">
-            {% if not is_admin %}
-            <span class="text-red-500">VIEW ONLY MODE</span>
+
+        <!-- ADMIN CONTROLS -->
+        <div id="status-bar" class="mt-4 flex flex-col items-center justify-center gap-2">
+            {% if is_admin %}
+                <button onclick="triggerWhatsApp()" id="whatsapp-btn" class="bg-green-600 text-white font-black text-xs uppercase py-2 px-4 rounded shadow hover:bg-green-700 transition flex items-center gap-2">
+                    <span>📱 Send WhatsApp Report</span>
+                </button>
+                <span id="admin-status-text" class="text-xs font-bold text-gray-400">Admin Mode Active</span>
+            {% else %}
+                <span class="text-red-500 font-bold text-sm">VIEW ONLY MODE</span>
             {% endif %}
         </div>
     </div>
 
+    <!-- Data Table -->
     <div class="bg-white shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden">
         <div id="loading-screen" class="p-10 text-center">
             <p class="text-gray-500 animate-pulse font-mono text-sm">SYNCING DATA...</p>
@@ -47,7 +56,7 @@
 <script>
     const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
     let allPlayers = [], allMonths = [], currentMonth = "";
-    const statusEl = document.getElementById('status-bar');
+    const statusEl = document.getElementById('admin-status-text');
 
     async function loadData() {
         try {
@@ -112,8 +121,8 @@
     async function togglePayment(playerId, checkbox) {
         if(!IS_ADMIN) return;
         const isChecked = checkbox.checked;
-        statusEl.innerText = "SAVING...";
-        statusEl.className = "mt-2 text-sm text-center h-5 font-bold text-yellow-600";
+        if(statusEl) statusEl.innerText = "SAVING...";
+        
         try {
             const res = await fetch('/api/update', {
                 method: 'POST',
@@ -122,19 +131,53 @@
             });
             const result = await res.json();
             if (result.success) {
-                statusEl.innerText = "SAVED ✓";
-                statusEl.className = "mt-2 text-sm text-center h-5 font-black text-green-600";
+                if(statusEl) {
+                    statusEl.innerText = "SAVED ✓";
+                    statusEl.classList.add('text-green-600');
+                    setTimeout(() => { 
+                        statusEl.innerText = "Admin Mode Active"; 
+                        statusEl.classList.remove('text-green-600');
+                    }, 2000);
+                }
                 const player = allPlayers.find(p => p.id == playerId);
                 if(player) player.payments[currentMonth] = isChecked;
                 const row = checkbox.closest('tr');
                 if(isChecked) row.classList.add('bg-yellow-50');
                 else row.classList.remove('bg-yellow-50');
-                setTimeout(() => { statusEl.innerText = ""; }, 2000);
             } else throw new Error(result.message);
         } catch (err) {
             checkbox.checked = !isChecked;
-            statusEl.innerText = "ERROR";
-            statusEl.className = "mt-2 text-sm text-center h-5 font-black text-red-600";
+            if(statusEl) statusEl.innerText = "ERROR";
+            alert("Update failed: " + err.message);
+        }
+    }
+
+    // --- WHATSAPP TRIGGER FUNCTION ---
+    async function triggerWhatsApp() {
+        if(!IS_ADMIN) return;
+        if(!confirm("Are you sure you want to send the Payment Report to the WhatsApp Group?")) return;
+
+        const btn = document.getElementById('whatsapp-btn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = "<span>⏳ SENDING...</span>";
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+
+        try {
+            const res = await fetch('/api/send-payment-report', { method: 'POST' });
+            const data = await res.json();
+            
+            if(data.success) {
+                alert("✅ Success: " + data.message);
+            } else {
+                alert("❌ Error: " + data.message);
+            }
+        } catch(err) {
+            alert("❌ Network Error: " + err.message);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     }
 
