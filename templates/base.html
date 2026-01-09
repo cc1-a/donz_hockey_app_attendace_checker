@@ -5,9 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Donz Hockey{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='base.css') }}">
+    
+    <style>
+        #login-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-box {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 350px;
+            border: 4px solid #FFDE00;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
 </head>
-<body class="opacity-0 transition-opacity duration-500 bg-gray-100">
+<body class="opacity-0 transition-opacity duration-500 bg-gray-100 flex flex-col min-h-screen">
 
     <!-- LOADER -->
     <div id="app-loader">
@@ -18,26 +45,35 @@
         <p class="text-yellow-500 font-mono text-xs mt-3 tracking-widest uppercase">Initializing System...</p>
     </div>
 
-    <!-- CONTENT -->
-    <div id="main-content">
+    <!-- MAIN CONTENT WRAPPER -->
+    <div id="main-content" class="flex-grow">
         <!-- Nav -->
         <nav class="bg-black pt-6 pb-4 px-2 shadow-xl sticky top-0 z-50 border-b-4 border-yellow-400">
             <div class="max-w-7xl mx-auto flex flex-col items-center relative">
                 
-                <!-- Logout (Top Right) -->
-                <a href="/logout" class="absolute right-0 top-0 text-gray-500 hover:text-red-500 text-xs font-bold uppercase tracking-wide">
-                    Logout
-                </a>
+                <!-- ADMIN LOGIN BUTTON (Top Right) -->
+                {% if session.get('user') %}
+                    <a href="{{ url_for('logout') }}" class="absolute right-0 top-0 text-red-500 hover:text-white text-xs font-bold uppercase tracking-wide py-2 px-3 border border-red-500 rounded hover:bg-red-600 transition">
+                        Logout
+                    </a>
+                {% else %}
+                    <button onclick="openModal()" class="absolute right-0 top-0 text-yellow-400 hover:text-white text-xs font-bold uppercase tracking-wide py-2 px-3 border border-yellow-400 rounded hover:bg-gray-800 transition">
+                        Admin Login
+                    </button>
+                {% endif %}
 
-                <!-- BRANDING HEADER -->
-                <div class="flex flex-col items-center justify-center gap-2 mb-4">
-                    <!-- Bigger Logo -->
+                <!-- BRANDING -->
+                <div class="flex flex-col items-center justify-center gap-1 mb-4 mt-2">
                     <img src="{{ url_for('static', filename='img/logo.png') }}" class="h-20 w-auto block drop-shadow-lg" alt="Logo">
                     
-                    <!-- Text Restored -->
                     <span class="text-white font-black text-3xl tracking-tighter italic leading-none">
                         DONZ<span class="text-yellow-400">HOCKEY</span>
                     </span>
+
+                    <!-- DEVELOPER CREDIT (MOVED HERE) -->
+                    <a href="https://amodhgunawardana.vercel.app/" target="_blank" class="text-[10px] font-bold text-gray-500 uppercase tracking-widest hover:text-yellow-400 transition mt-1">
+                        Developed by Amodh Gunawardana
+                    </a>
                 </div>
 
                 <!-- Tabs -->
@@ -60,6 +96,34 @@
         </main>
     </div>
 
+    <!-- LOGIN MODAL -->
+    <div id="login-modal">
+        <div class="modal-box">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-black uppercase italic">Admin Access</h2>
+                <button onclick="closeModal()" class="text-2xl font-bold hover:text-red-500">&times;</button>
+            </div>
+            
+            <div id="login-error-msg" class="hidden bg-red-100 text-red-700 p-2 rounded mb-3 text-xs font-bold text-center">
+                Invalid Credentials
+            </div>
+
+            <form action="{{ url_for('login') }}" method="POST">
+                <div class="mb-3">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Username</label>
+                    <input type="text" name="username" class="w-full p-2 border-2 border-gray-300 rounded focus:border-yellow-400 outline-none font-bold">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Password</label>
+                    <input type="password" name="password" class="w-full p-2 border-2 border-gray-300 rounded focus:border-yellow-400 outline-none font-bold">
+                </div>
+                <button type="submit" class="w-full bg-black text-yellow-400 font-black py-3 rounded hover:bg-gray-800 transition">
+                    ENTER
+                </button>
+            </form>
+        </div>
+    </div>
+
     <script>
         window.addEventListener('load', function() {
             const bar = document.getElementById('progress-bar');
@@ -75,6 +139,17 @@
                 }, 400);
             }, 800);
         });
+
+        const modal = document.getElementById('login-modal');
+        function openModal() { modal.style.display = 'flex'; }
+        function closeModal() { modal.style.display = 'none'; }
+        modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); });
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.has('login_error')) {
+            openModal();
+            document.getElementById('login-error-msg').classList.remove('hidden');
+        }
     </script>
 </body>
 </html>
