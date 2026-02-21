@@ -51,14 +51,17 @@ def admin_required(f):
 
 def send_donz_announcement(message):
     """Sends message via Wabot API"""
-    url = "https://app.wabot.my/api/send_group"
+    
+    # 1. Pull credentials securely from your environment variables
+    instance_id = os.environ.get("WABOT_INSTANCE_ID", "696103D4D811C")
+    access_token = os.environ.get("WABOT_ACCESS_TOKEN", "6935797c735a5")
+    
+    # 2. Force the correct group endpoint (Ignore WABOT_URL if it's set to /api/send)
+    url = "https://app.wabot.my/api/send_group" 
     
     # --- LIVE GROUP ID (DONZ HOCKEY) ---
     group_id = "120363334408919344@g.us"
     # -----------------------------------
-    
-    instance_id = "696103D4D811C"
-    access_token = "6935797c735a5"
     
     payload = {
         "group_id": group_id,
@@ -71,12 +74,19 @@ def send_donz_announcement(message):
     try:
         response = requests.post(url, json=payload, timeout=20)
         data = response.json()
+        
+        # DEBUGGING: This will print exactly what Wabot replies into your Vercel logs
+        print(f"--- WABOT API RESPONSE ---")
+        print(f"Status Code: {response.status_code}")
+        print(f"Response Data: {data}")
+        print(f"--------------------------")
+        
         if response.status_code == 200 and data.get("status") == "success":
-            print(f"WhatsApp Sent! Queue ID: {data.get('details', {}).get('queue_id')}")
             return True
         else:
             print(f"WhatsApp Failed: {data}")
             return False
+            
     except Exception as e:
         print(f"WhatsApp Connection Error: {e}")
         return False
