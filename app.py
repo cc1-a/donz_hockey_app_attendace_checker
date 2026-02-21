@@ -336,6 +336,12 @@ def submit_attendance():
             col_index = headers.index(date_str) + 1
         else:
             col_index = len(headers) + 1
+            
+            # --- FIX: Check if we exceed grid limits and add a column ---
+            if col_index > ws.col_count:
+                ws.add_cols(1)
+            # ------------------------------------------------------------
+            
             ws.update_cell(1, col_index, date_str)
         
         sheet_names = ws.col_values(1)
